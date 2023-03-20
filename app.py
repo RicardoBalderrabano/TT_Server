@@ -1,12 +1,13 @@
-from flask import Flask,jsonify
-import request
+from flask import Flask
+from flask import jsonify # <- `jsonify` instead of `json`
+from flask import request
 from config_app import config
 from flask_mysqldb import MySQL
 
   
 
 app = Flask(__name__)
-
+encodingsJ=[{'encoding':'12 415 45 45'}]
 conexion=MySQL(app)
 
 @app.route('/users')
@@ -45,7 +46,7 @@ def read_person(PersonID):
 def addencodingsJ():
    encodingJ={'encoding':request.json['encoding']}
    encodingsJ.append(encodingJ)
-   return jasonify({'encodings':encodingsJ}) 
+   return jsonify({'encodings':encodingsJ}) 
      
 def page_no_found(error):
    return "<h1>La pagina que intentas buscar no existe...</h1>", 404
