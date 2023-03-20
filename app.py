@@ -41,7 +41,7 @@ def read_person(PersonID):
    except Exception as ex:
       return jsonify({'message':'ERROR 2'})
 
-@app.route('/encoding', methods=['POST'])
+@app.route('/encodings', methods=['POST'])
 def read_person(PersonID):
    try:
       cursor=conexion.connection.cursor()
