@@ -10,7 +10,7 @@ from flask import request
 from config_app import config
 from flask_mysqldb import MySQL
 import json
-from RecognizerFunction import addencodingsJ
+from RecognizerFunction import recognizer
 
 
 app = Flask(__name__)
@@ -52,8 +52,34 @@ def read_person(PersonID):
        
 
 @app.route('/encodings', methods=['POST'])   # Getting POST request from Raspberry Pi (Encoding)
-# FUNCTION FOR FACE RECOGNITION
 
+# FUNCTION FOR FACE RECOGNITION
+def facerecognition():
+   try:
+      encs = request.json['encoding']  # Convert json "encodings" to array
+      # Derialization of encoding recieved
+      decodeArrays=json.loads(encs)
+      finalNumpyArray=np.asarray(decodeArrays)
+      # Convert Encoding array to a List of Array 
+      encodings=[(finalNumpyArray)]
+      # Inner Function for face recognition
+      PersonID=recognizer(encodings)
+      # Database connection
+      cursor=conexion.connection.cursor()
+      sql="SELECT PersonID, LastName, FirstName FROM Users WHERE PersonID = '{0}'".format(PersonID)
+      cursor.execute(sql)
+      datos=cursor.fetchone()
+      if datos != None:
+         person={'LastName':datos[1], 'FirstName':datos[2]}
+         return jsonify({'person':person, 'message':'UserFound'})
+      else:
+         return jsonify({'message':'UserNoFound'})
+
+   except Exception as ex:
+      return jsonify({'message':'FACE RECOGNITION ERROR'})
+
+
+'''
 def addencodingsJ():
 
    FACEDB = "/home/ubuntu/tests/facedatabase2.dat"  # Direction of the database of trained faces
@@ -115,9 +141,6 @@ def addencodingsJ():
    # update the list of ids
    userIDs.append(id)
 
-   # loop over the recognized faces
-   print(id)
-   
    # Database connection
    PersonID=id
    cursor=conexion.connection.cursor()
@@ -129,7 +152,7 @@ def addencodingsJ():
       return jsonify({'person':person, 'message':'UserFound'})
    else:
        return jsonify({'message':'UserNoFound'})
-
+'''
 def page_no_found(error):
    return "<h1>La pagina que intentas buscar no existe...</h1>", 404
   
