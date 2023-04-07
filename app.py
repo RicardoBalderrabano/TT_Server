@@ -12,6 +12,7 @@ from flask_mysqldb import MySQL
 import json
 from RecognizerFunction import recognizer
 from datetime import datetime
+from QueryData import getDayID,getScheduleID # Functions for QueryData in DB
 
 
 app = Flask(__name__)
@@ -73,7 +74,7 @@ def facerecognition():
       cursor.execute(sql)
       datos=cursor.fetchone()
       if datos != None:
-         person={'LastName':datos[1], 'FirstName':datos[2]}
+         person={'UserID':datos[0], 'LastName':datos[1], 'FirstName':datos[2]}   # Gettin UserID and Name
          return jsonify({'person':person, 'message':'UserFound'})
       else:
          return jsonify({'message':'UserNoFound'})
@@ -101,18 +102,24 @@ def LockerStatus():
    lockerfreeJs={'LockerID': lockerfree[0], 'DirectionF':lockerfree[1]} # LockerID, Direction to be opened
    return jsonify({'Lockers': lockall, 'LockerFree':lockerfreeJs}) # Lockers registered and Locker ID/Direction to be opened
   
-# Getting POST to check user locker
+# Getting POST to check if the user has already a locker
 @app.route('/CheckLocker', methods=['POST']) # CHECKING LOCKER-USER 
-# FUNCTION TO RETRIEVE INFROMATION OF LockersUsers TABLE
+
+# FUNCTION TO RETRIEVE INFORMATION FROM LockersUsers TABLE
+# This function needs the UserID and make a query in the table LockersUsers to check if the user has already a Locker
+# The query "sql" returns the LockerStatus if exists for the User :
+#  --> If not exists a record of the User means that does not have any locker, so assigns a new locker automatically (The first available)
+#  --> If the User has a LockerStatus = 1 means that the User is using a locker and has not finished to used it, so assigns that locker
+#  --> If the User has a LockerStatus = 2 means that already finished to use the last locker assigned, so assigns a new locker
+
 def checklocker():
    
       UserID=request.json['UserID']  # Getting UserID from the json.request file
-      print(UserID)
       cursor=conexion.connection.cursor()
       sql="SELECT LockerID, LockerUsed, PersonID, DateAndTime FROM LockersUsers AS Ordered_date WHERE DateAndTime=ANY(SELECT MAX(DateAndTime) FROM LockersUsers GROUP BY PersonID) AND PersonID='{0}'".format(UserID)
       cursor.execute(sql)
-      LastLockerStatus=cursor.fetchone()
-      #LastLocker=LastLockerStatus[1]
+      LastLockerStatus=cursor.fetchone()  # Getting answer from the query
+      
       if LastLockerStatus is None:
          #ASIGN NEW LOCKER
          openflag=0 # Just open locker option
@@ -124,12 +131,14 @@ def checklocker():
       
       else:
          LastLocker=LastLockerStatus[1]
+         
          if LastLocker==1:
             #ASIGN THE SAME LOCKER
             openflag=1 #Open locker and leave option
             lockerfree=LastLockerStatus[0]
-            lockerfreeJs={'LockerID':lockerfree}
+            lockerfreeJs={'LockerID':lockerfree}   # LockerID, Direction to be opened
             return jsonify({'LockerFree': lockerfreeJs, 'Openflag': openflag})
+        
          elif LastLocker==2:
             #ASIGN NEW LOCKER
             openflag=0 # Just open locker option
@@ -139,12 +148,16 @@ def checklocker():
             lockerfree=LastLockerStatus[0]
             lockerfreeJs={'LockerID': lockerfree, 'DirectionF':lockerfree[1]} # LockerID, Direction to be opened
             return jsonify({'LockerFree':lockerfreeJs, 'Openflag': openflag}) # Lockers registered and Locker ID/Direction to be opened
+        
          else:
             return jsonify({'LockerFree': 'ERROR', 'Openflag': 'ERROR'})
 
 # Getting POST to update LockersUsers Table in the DB
 @app.route('/updateRegister', methods=['POST']) # UPDATING DB BITACORA
-# FUNCTION FOR INSERT DATA WHEN A LOCKER IS OPENED (UserID, LockerID, DATE and TIME)
+
+# FUNCTION TO INSERT DATA WHEN A LOCKER IS OPENED (UserID, LockerID, DATE and TIME) IN LockersUsers TABLE (BITACORA)
+# The function use the UserID, LockerID and Leaveflag to register when a locker is opened
+
 def lockerUsability():
    #try:
       now=datetime.now()   # Getting date and time from the server
@@ -154,38 +167,35 @@ def lockerUsability():
       LockerID2 = request.json['LockerID']  # Getting LockerID from the json.request file
       Leaveflag=int(request.json['Leaveflag'])
       print(Leaveflag)
-      if Leaveflag==1:
-         # INSERT DATA INTO THE TABLE (Instruction)   
+
+      if Leaveflag==1:    # The user will be still using the locker
+         # INSERT DATA INTO THE TABLE (BITACORA)   
          sql3="INSERT LockersUsers (LockerID, PersonID, DateAndTime, LockerUsed) VALUES (%s,%s,%s,%s)"
          input_date=(LockerID2, UserID, formatted_date, Leaveflag)
          cursor.execute(sql3,input_date)
          conexion.connection.commit() #Updating Finished
-         # UPDATE LOCKER STATUS
-         sql4="UPDATE Lockers SET Availability=2 WHERE LockerID='{0}'".format(LockerID2)
+
+         # UPDATE LOCKER STATUS 
+         sql4="UPDATE Lockers SET Availability=2 WHERE LockerID='{0}'".format(LockerID2) #Locker NOT AVAILABLE
          cursor.execute(sql4)
-         conexion.connection.commit() #Updating Finishe
-         return jsonify({'message':'Registro Done'})
-      else:
-         print('Aqui')
-         print(LockerID2)
-         print(UserID)
-         print(formatted_date)
-         print(Leaveflag)
-         
-         sql5="INSERT LockersUsers (LockerID, PersonID, DateAndTime, LockerUsed) VALUES (%s,%s,%s,%s)"
-         input_date2=(LockerID2, UserID, formatted_date, Leaveflag)
-         cursor.execute(sql5,input_date2)
-         conexion.connection.commit() #Updating Finished'''
-         
-         # UPDATE LOCKER STATUS
-         sql6="UPDATE Lockers SET Availability=1 WHERE LockerID='{0}'".format(LockerID2)
-         cursor.execute(sql6)
          conexion.connection.commit() #Updating Finished
          return jsonify({'message':'Registro Done'})
 
-      
-      #conexion.connection.commit() #Updating Finished 
-      print("User registered successfully")
+      else:    # The user won´t use the locker anymore (Leave the building)
+         
+         # INSERT DATA INTO THE TABLE (BITACORA)   
+         sql5="INSERT LockersUsers (LockerID, PersonID, DateAndTime, LockerUsed) VALUES (%s,%s,%s,%s)"
+         input_date2=(LockerID2, UserID, formatted_date, Leaveflag)
+         cursor.execute(sql5,input_date2)
+         conexion.connection.commit() #Updating Finished
+         
+         # UPDATE LOCKER STATUS
+         sql6="UPDATE Lockers SET Availability=1 WHERE LockerID='{0}'".format(LockerID2)  # Locker IS AVAILABLE NOW
+         cursor.execute(sql6)
+         conexion.connection.commit() # Updating Finished
+         return jsonify({'message':'Registro Done'})
+
+      print("User registered successfully") 
       return jsonify({'message':'Registro Done'}) 
    
 
@@ -216,6 +226,69 @@ def facerecognitionLockers():
 
    except Exception as ex:
       return jsonify({'message':'FACE RECOGNITION ERROR'})
+
+
+@app.route('/registrationL', methods=['POST'])   # Getting POST request from Raspberry Pi Laboratory
+
+# FUNCTION FOR LOCKER REEGISTRATION
+def registrationL():
+   now=datetime.now()   # Getting date and time from the server
+   formatted_date=now.strftime('%Y-%m-%d %H:%M:%S') # Setting format of the data and time 
+   cursor=conexion.connection.cursor()
+   UserID=int(request.json['UserID']) # Getting UserID from the json.request file
+   LaboratoryID = request.json['LaboratoryID']  # Getting LockerID from the json.request file
+   DayID=getDayID()
+   ScheduleID=getScheduleID()
+
+   print(UserID)
+   print(LaboratoryID)
+   print(DayID)
+   print(ScheduleID)
+
+   # User has a registration?
+   sql1="SELECT*FROM ACCESS WHERE LaboratoryID=%s AND DayID=%s AND ScheduleID=%s AND PersonID=%s"
+   sql1_input=(LaboratoryID, DayID, ScheduleID, UserID)
+   cursor.execute(sql1, sql1_input)
+   Lesson=cursor.fetchone() #All data
+   print(Lesson)
+   
+   if Lesson !=None:
+      print("hay clase")
+   
+      #Query RecordsManufactura if the user has '1' or '2' or ANY flag for the laboratory
+      sql= "SELECT EntranceFlag FROM RecordsManufactura AS Ordered_date WHERE DateAndTime=ANY(SELECT MAX(DateAndTime) FROM RecordsManufactura GROUP BY PersonID) AND PersonID='{0}'".format(UserID)
+      cursor.execute(sql)
+      datos=cursor.fetchone()
+      
+      if datos ==None:     # NO REGISTRATION YET
+         sql2="INSERT RecordsManufactura (PersonID, DateAndTime, EntranceFlag) VALUES (%s,%s,%s)"  # INSERT a new registration
+         sql2_input=(UserID, formatted_date, 1)   # '1' for first registration
+         cursor.execute(sql2,sql2_input)
+         conexion.connection.commit() #Updating Finished
+         return jsonify({'message':'Registration done'})
+      else: 
+         flagE=datos[0]    # Reading the flag of the registration
+         print(flagE)
+         if flagE==2:      # The last entrance of the User has finished --> Insert a new registration 
+            sql2="INSERT RecordsManufactura (PersonID, DateAndTime, EntranceFlag) VALUES (%s,%s,%s)"
+            sql2_input=(UserID, formatted_date, 1)   # '1' for first registration
+            cursor.execute(sql2,sql2_input)
+            conexion.connection.commit() # Update Finished
+            return jsonify({'message':'Registration done'})
+
+         else:
+            # UPDATE ENTRANCE STATUS--> EntranceFlag = 1 so the User will leave the laboratory
+            sql3="INSERT RecordsManufactura (PersonID, DateAndTime, EntranceFlag) VALUES (%s,%s,%s)"
+            sql3_input=(UserID, formatted_date, 2)   # '1' for first registration
+            cursor.execute(sql3,sql3_input)
+            conexion.connection.commit() # Update Finished
+            return jsonify({'message':'Registration done'})
+   else:
+      print ("No hay clase")
+
+      #INSER TO DENIED ACCESS
+      return jsonify({'message':'ACCESO NEGADO'})
+    
 
 def page_no_found(error):
    return "<h1>La pagina que intentas buscar no existe...</h1>", 404
