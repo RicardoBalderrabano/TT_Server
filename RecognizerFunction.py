@@ -76,18 +76,18 @@ def recognizer(encodings):
                if value:
                   matchedIdxs.append(idx)
                
-               counts = {}
-               # loop over the matched indexes and maintain a count for
-               # each recognized face
-               for i in matchedIdxs:
-                  id = faceData["ids"][i]
-                  counts[id] = counts.get(id, 0) + 1
-               # determine the recognized face with the largest number of
-               # votes (note: in the event of an unlikely tie Python will
-               # select first entry in the dictionary)
-               id = max(counts, key=counts.get)
-               if(counts[id] < (maxImgs * conf)):
-                  id = "Unknown"
+         counts = {}
+         # loop over the matched indexes and maintain a count for
+         # each recognized face
+         for i in matchedIdxs:
+            id = faceData["ids"][i]
+            counts[id] = counts.get(id, 0) + 1
+         # determine the recognized face with the largest number of
+         # votes (note: in the event of an unlikely tie Python will
+         # select first entry in the dictionary)
+         id = max(counts, key=counts.get)
+         if(counts[id] < (maxImgs * conf)):
+            id = "Unknown"
 
    # update the list of ids
    userIDs.append(id)

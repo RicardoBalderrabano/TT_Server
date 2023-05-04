@@ -5,12 +5,12 @@ import pickle
 import os
 
 # set 1 for macOS, maybe 0 for windows and others
-capture = cv2.VideoCapture(1)
+capture = cv2.VideoCapture(0)
 trainedEncodings = []  # to store encodings
 trainedIDs = []  # to store ids
 cont = 0  # face image counter
-MAXIMGS = 100  # maximum number of images to train
-FACEDB = "\\RICARDO\\Escritorio\\upiita\\SEMESTRE 9\\Vision Artificial\\facedb\\facedatabase2.dat"  # name of the database
+MAXIMGS = 10  # maximum number of images to train
+FACEDB = "\\RICARDO\\Escritorio\\upiita\\SEMESTRE 9\\Vision Artificial\\facedb\\facedatabase3.dat"  # name of the database
 
 file_dir = os.path.dirname(os.path.realpath(__file__))
 FACEDB = os.path.join(file_dir, FACEDB)
@@ -46,7 +46,7 @@ while (capture.isOpened()):
     rects = face_recognition.face_locations(rgb, 0, "hog")
 
     # Press c to capture an image
-    if (cv2.waitKey(1)):
+    if (cv2.waitKey(1) == ord("c")):
         cont = cont + 1
         # compute the facial embedding for the face
         encodings = face_recognition.face_encodings(rgb, rects)
