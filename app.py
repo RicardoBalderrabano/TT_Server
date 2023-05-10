@@ -10,14 +10,27 @@ from flask import request
 from config_app import config
 from flask_mysqldb import MySQL
 import json
-from RecognizerFunction import recognizer
+from RecognizerFunction import recognizer, getEncodings, addEncodings
 from datetime import datetime
 from QueryData import getDayID,getScheduleID # Functions for QueryData in DB
+from werkzeug.utils import secure_filename
+from json import JSONEncoder
 
+class NumpyArrayEncoder(JSONEncoder):
+   def default(self, obj):
+      if isinstance(obj, np.ndarray):
+         return obj.tolist()
+      return JSONEncoder.default(self, obj)
+
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 
 app = Flask(__name__)
+app.config.from_object(config['production'])
 
 conexion=MySQL(app)
+
+def allowed_file(filename):
+   return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 # TEST FUNCTION
 @app.route('/users')
@@ -35,7 +48,7 @@ def list_users():
 
    except Exception as ex:
       print(ex)
-      return jsonify({'message':'x'})
+      return jsonify({'message':str(ex)})
 
 # TEST FUNCTION
 @app.route('/users/<PersonID>', methods=['GET'])
@@ -327,12 +340,41 @@ def BuildingAccess():
 
    except Exception as ex:
       return jsonify({'message':'BUILDING REGISTRATION ERROR'})
+   
+
+@app.route('/GetEncondings', methods=['POST']) 
+def GenerateEncodings():
+   if 'file' not in request.files:
+      return jsonify({'status':False,'message':'No file uploaded.'})
+   file = request.files['file']
+   if file.filename == '':
+      return jsonify({'status':False,'message':'No file uploaded.'})
+   if file and allowed_file(file.filename):
+      filename = secure_filename(file.filename)
+      filename = os.path.join(app.config['UPLOAD_FOLDER'], filename) 
+      file.save(filename)
+      encodings = getEncodings(filename)
+      os.remove(filename)
+      if len(encodings) == 0:
+         return jsonify({'status':False,'message':'No face detected.'}) 
+      data = {'status':True,'message':'OK', 'encodings': encodings[0]}
+      return jsonify(json.dumps(data, cls=NumpyArrayEncoder))
+
+
+@app.route('/AddEncondings', methods=['POST']) 
+def AddEncodings():
+   UserID = int(request.json['UserID'])
+   encs = request.json['encoding']
+   encodings=np.asarray(encs)
+   res = addEncodings(UserID, encodings)
+   return jsonify({'status':res})  
+
 
 def page_no_found(error):
    return "<h1>La pagina que intentas buscar no existe...</h1>", 404
   
 
 if __name__ == "__main__":
-   app.config.from_object(config['development'])
+   app.config.from_object(config['production'])
    app.register_error_handler(404,page_no_found)
-   app.run(host='0.0.0.0',port=80)
+   app.run(host='0.0.0.0',port=5100)

@@ -42,7 +42,7 @@ import json
 #The function recieves the encodings of the face and return the ID (if exists in the DB)
 def recognizer(encodings):
 
-   FACEDB = "/home/ubuntu/tests/facedatabase2.dat"  # Direction of the database of trained faces
+   FACEDB = "facedatabase2.dat"  # Direction of the database of trained faces
    
    file_dir = os.path.dirname(os.path.realpath(__file__))
    FACEDB = os.path.join(file_dir, FACEDB)
@@ -94,3 +94,37 @@ def recognizer(encodings):
 
    #encodingsJ.append(encodingJ)
    return id
+
+
+def getEncodings(filename):
+   image = cv2.imread(filename)
+   image = imutils.resize(image, width=1080)
+   rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+   rects = face_recognition.face_locations(rgb, 0, "hog")
+   encodings = face_recognition.face_encodings(rgb, rects)
+   return encodings
+
+def addEncodings(id, encodings):
+   FACEDB = "facedatabase2.dat"
+   trainedEncodings = [] 
+   trainedIDs = []  
+   file_dir = os.path.dirname(os.path.realpath(__file__))
+   FACEDB = os.path.join(file_dir, FACEDB)
+   FACEDB = os.path.abspath(os.path.realpath(FACEDB))
+   try:
+      data = pickle.loads(open(FACEDB, "rb").read())
+      trainedEncodings = data["encodings"]
+      trainedIDs = data["ids"]
+   except Exception as inst:
+      print(type(inst))
+      print(inst.args)
+      print(inst)
+
+   for encoding in encodings:
+      trainedEncodings.append(encoding)
+      trainedIDs.append(id)
+   data = {"encodings": trainedEncodings, "ids": trainedIDs}
+   with open(FACEDB, 'wb') as fp:
+      pickle.dump(data, fp)
+   return True
+   
