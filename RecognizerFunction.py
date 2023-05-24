@@ -50,7 +50,7 @@ def recognizer(encodings):
 
    # Confidence 
    conf = 0.5
-   maxImgs = 100
+   maxImgs = 10
 
    # Load the faces database
    print("Loading faces database...")

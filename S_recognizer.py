@@ -41,7 +41,7 @@ FACEDB = os.path.abspath(os.path.realpath(FACEDB))
 
 # confidence 
 conf = 0.5
-maxImgs = 5
+maxImgs = 10
 
 # load the faces database
 print("Loading faces database...")

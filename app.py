@@ -12,9 +12,11 @@ from flask_mysqldb import MySQL
 import json
 from RecognizerFunction import recognizer, getEncodings, addEncodings
 from datetime import datetime
-from QueryData import getDayID,getScheduleID # Functions for QueryData in DB
+#from QueryData import getDayID,getScheduleID # Functions for QueryData in DB
 from werkzeug.utils import secure_filename
 from json import JSONEncoder
+import traceback
+
 
 class NumpyArrayEncoder(JSONEncoder):
    def default(self, obj):
@@ -31,24 +33,6 @@ conexion=MySQL(app)
 
 def allowed_file(filename):
    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-# TEST FUNCTION
-@app.route('/users')
-def list_users():
-   try:
-      cursor=conexion.connection.cursor()
-      sql="SELECT PersonID, LastName, FirstName FROM Users"
-      cursor.execute(sql)
-      datos=cursor.fetchall()
-      persons=[]
-      for fila in datos:
-         person={'ID':fila[0], 'LastName':fila[1], 'FirstName':fila[2]}
-         persons.append(person)
-      return jsonify({'persons':persons, 'message': 'Usuarios listados'})
-
-   except Exception as ex:
-      print(ex)
-      return jsonify({'message':str(ex)})
 
 # TEST FUNCTION
 @app.route('/users/<PersonID>', methods=['GET'])
@@ -114,7 +98,7 @@ def LockerStatus():
    lockerfree=cursor.fetchone()
    lockerfreeJs={'LockerID': lockerfree[0], 'DirectionF':lockerfree[1]} # LockerID, Direction to be opened
    return jsonify({'Lockers': lockall, 'LockerFree':lockerfreeJs}) # Lockers registered and Locker ID/Direction to be opened
-  
+ 
 # Getting POST to check if the user has already a locker
 @app.route('/CheckLocker', methods=['POST']) # CHECKING LOCKER-USER 
 
@@ -125,15 +109,42 @@ def LockerStatus():
 #  --> If the User has a LockerStatus = 1 means that the User is using a locker and has not finished to used it, so assigns that locker
 #  --> If the User has a LockerStatus = 2 means that already finished to use the last locker assigned, so assigns a new locker
 
+
 def checklocker():
    try:
-      UserID=request.json['UserID']  # Getting UserID from the json.request file
+      #Is there a locker Available?
+      sqlLocker="SELECT*FROM Lockers WHERE Availability = 1"
       cursor=conexion.connection.cursor()
+      cursor.execute(sqlLocker)
+      AnyLocker=cursor.fetchone()
+
+      UserID=request.json['UserID']  # Getting UserID from the json.request file
       sql="SELECT LockerID, LockerUsed, PersonID, DateAndTime FROM LockersUsers AS Ordered_date WHERE DateAndTime=ANY(SELECT MAX(DateAndTime) FROM LockersUsers GROUP BY PersonID) AND PersonID='{0}'".format(UserID)
       cursor.execute(sql)
       LastLockerStatus=cursor.fetchone()  # Getting answer from the query
       
-      if LastLockerStatus is None:
+      if  LastLockerStatus != None:
+         LastLocker=LastLockerStatus[1]
+         if LastLocker==1:
+            #ASIGN THE SAME LOCKER
+            openflag=1 #Open locker and leave option
+            lockerfree=LastLockerStatus[0]   #solo regresa la direccion porque es el mismo
+            lockerfreeJs={'LockerID':LastLockerStatus[0], 'DirectionF':LastLockerStatus[1]}   # LockerID, Direction to be opened
+            print(LastLockerStatus)
+            return jsonify({'LockerFree': lockerfreeJs, 'Openflag': openflag})
+         
+         elif LastLocker==2 and AnyLocker != None:
+            #ASIGN NEW LOCKER
+            openflag=0 # Just open locker option
+            sql2="SELECT LockerID, LockerNum FROM Lockers WHERE LockerNum=(SELECT MIN(LockerNum) FROM Lockers WHERE Availability=1)" 
+            cursor.execute(sql2)
+            lockerfree=cursor.fetchone()
+            #lockerfree=LastLockerStatus[0]
+            lockerfreeJs={'LockerID': lockerfree[0], 'DirectionF':lockerfree[1]} # LockerID, Direction to be opened
+            print(lockerfreeJs)
+            return jsonify({'LockerFree':lockerfreeJs, 'Openflag': openflag}) # Lockers registered and Locker ID/Direction to be opened
+         
+      elif AnyLocker != None and LastLockerStatus is None:
          #ASIGN NEW LOCKER
          openflag=0 # Just open locker option
          sql2="SELECT LockerID, LockerNum FROM Lockers WHERE LockerNum=(SELECT MIN(LockerNum) FROM Lockers WHERE Availability=1)" 
@@ -144,33 +155,17 @@ def checklocker():
          return jsonify({'LockerFree':lockerfreeJs, 'Openflag': openflag}) # Lockers registered and Locker ID/Direction to be opened
       
       else:
-         LastLocker=LastLockerStatus[1]
-         
-         if LastLocker==1:
-            #ASIGN THE SAME LOCKER
-            openflag=1 #Open locker and leave option
-            lockerfree=LastLockerStatus[0]   #solo regresa la direccion porque es el mismo
-            lockerfreeJs={'LockerID':LastLockerStatus[0], 'DirectionF':LastLockerStatus[1]}   # LockerID, Direction to be opened
-            print(LastLockerStatus)
-            return jsonify({'LockerFree': lockerfreeJs, 'Openflag': openflag})
-        
-         elif LastLocker==2:
-            #ASIGN NEW LOCKER
-            openflag=0 # Just open locker option
-            sql2="SELECT LockerID, LockerNum FROM Lockers WHERE LockerNum=(SELECT MIN(LockerNum) FROM Lockers WHERE Availability=1)" 
-            cursor.execute(sql2)
-            lockerfree=cursor.fetchone()
-            #lockerfree=LastLockerStatus[0]
-            lockerfreeJs={'LockerID': lockerfree[0], 'DirectionF':lockerfree[1]} # LockerID, Direction to be opened
-            print(lockerfreeJs)
-            return jsonify({'LockerFree':lockerfreeJs, 'Openflag': openflag}) # Lockers registered and Locker ID/Direction to be opened
-        
-         else:
-            return jsonify({'LockerFree': 'ERROR', 'Openflag': 'ERROR'})
+         print("no hay lockers")
+         lockerfreeJs={'LockerID': 'None'}
+         return jsonify({'LockerFree': lockerfreeJs}) 
 
    except Exception as ex:
+      print(ex)
+      traceback.print_exc()
       return jsonify({'message':'CHECK LOCKER ERROR'})
 # Getting POST to update LockersUsers Table in the DB
+
+
 @app.route('/updateRegister', methods=['POST']) # UPDATING DB BITACORA
 
 # FUNCTION TO INSERT DATA WHEN A LOCKER IS OPENED (UserID, LockerID, DATE and TIME) IN LockersUsers TABLE (BITACORA)
@@ -211,9 +206,6 @@ def lockerUsability():
          conexion.connection.commit() # Updating Finished
          return jsonify({'message':'Registro Done'})
 
-      print("User registered successfully") 
-      return jsonify({'message':'Registro Done'}) 
-
    except Exception as ex:
       return jsonify({'message':'LOCKER ERROR'})
 
@@ -253,7 +245,7 @@ def registrationL():
    try:
       cursor=conexion.connection.cursor()
       UserID=int(request.json['UserID']) # Getting UserID from the json.request file
-      LaboratoryID =int(request.json['LaboratoryID'])  # Getting LockerID from the json.request file
+      LaboratoryID =int(request.json['LaboratoryID'])  # Getting LaboratoryID from the json.request file
       # User has a registration?
       sql1="call sp_registration(%s,%s)"
       sql1_input=(LaboratoryID, UserID)
@@ -261,7 +253,7 @@ def registrationL():
       Lesson=cursor.fetchone() #All data
 
       if Lesson !=None:
-         print("hay clase")
+         print("hay clase registrada")
       
          #Query RecordsManufactura if the user has '1' or '2' or ANY flag for the laboratory
          sql= "SELECT EntranceFlag FROM RecordsManufactura AS Ordered_date WHERE DateAndTime=ANY(SELECT MAX(DateAndTime) FROM RecordsManufactura GROUP BY PersonID) AND PersonID='{0}'".format(UserID)
@@ -269,8 +261,8 @@ def registrationL():
          datos=cursor.fetchone()
          
          if datos ==None:     # NO REGISTRATION YET
-            sql2="CALL sp_updateRegistration(%s,%s)"  # INSERT a new registration
-            sql2_input=(UserID, 1)   # '1' for first registration
+            sql2="CALL sp_updateRegistration(%s,%s,%s)"  # INSERT a new registration
+            sql2_input=(UserID, 1, 1)   # '1' for first registration
             cursor.execute(sql2,sql2_input)
             conexion.connection.commit() #Updating Finished
             return jsonify({'message':'Registration done', 'EntranceFlag':1})
@@ -278,24 +270,69 @@ def registrationL():
             flagE=datos[0]    # Reading the flag of the registration
             print(flagE)
             if flagE==2:      # The last entrance of the User has finished --> Insert a new registration 
-               sql2="CALL sp_updateRegistration(%s,%s)" 
-               sql2_input=(UserID, 1)   # '1' for first registration
+               sql2="CALL sp_updateRegistration(%s,%s,%s)" 
+               sql2_input=(UserID, 1 , 1)   # '1' for first registration
                cursor.execute(sql2,sql2_input)
                conexion.connection.commit() # Update Finished
                return jsonify({'message':'Registration done', 'EntranceFlag':1})
 
             else:
                # UPDATE ENTRANCE STATUS--> EntranceFlag = 1 so the User will leave the laboratory
-               sql3="CALL sp_updateRegistration(%s,%s)" 
-               sql3_input=(UserID, 2)   # '1' for first registration
+               sql3="CALL sp_updateRegistration(%s,%s,%s)" 
+               sql3_input=(UserID, 2, 1)   # '1' for first registration
                cursor.execute(sql3,sql3_input)
                conexion.connection.commit() # Update Finished
                return jsonify({'message':'Registration done', 'EntranceFlag':2})
-      else:
-         print ("No hay clase")
+            
 
-         #INSER TO DENIED ACCESS
-         return jsonify({'message':'ACCESO NEGADO'})
+      else: #Search in Access Requests Table 
+         #Query AccessRequest if the user has a request accepted to enter 
+         sql4="CALL sp_registrationRequested(%s,%s)"
+         sql4_input=(LaboratoryID, UserID)
+         cursor.execute(sql4, sql4_input)
+         Requested=cursor.fetchone() #All data
+
+         if Requested !=None:  # A registration is found  --> Make a registration in the Table RecordsManufactura with Requested=2
+            print("hay solicitud aceptada")
+      
+            #Query RecordsManufactura if the user has '1' or '2' or ANY flag for the laboratory
+            sql= "SELECT EntranceFlag FROM RecordsManufactura AS Ordered_date WHERE DateAndTime=ANY(SELECT MAX(DateAndTime) FROM RecordsManufactura GROUP BY PersonID) AND PersonID='{0}'".format(UserID)
+            cursor.execute(sql)
+            datos=cursor.fetchone()
+            
+            if datos ==None:     # NO REGISTRATION YET
+               sql2="CALL sp_updateRegistration(%s,%s,%s)"  # INSERT a new registration
+               sql2_input=(UserID, 1, 2)   # '1' for first registration
+               cursor.execute(sql2,sql2_input)
+               conexion.connection.commit() #Updating Finished
+               return jsonify({'message':'Registration done', 'EntranceFlag':1})
+            else: 
+               flagE=datos[0]    # Reading the flag of the registration
+               print(flagE)
+               if flagE==2:      # The last entrance of the User has finished --> Insert a new registration 
+                  sql2="CALL sp_updateRegistration(%s,%s,%s)" 
+                  sql2_input=(UserID, 1 , 2)   # '1' for first registration
+                  cursor.execute(sql2,sql2_input)
+                  conexion.connection.commit() # Update Finished
+                  return jsonify({'message':'Registration done', 'EntranceFlag':1})
+
+               else:
+                  # UPDATE ENTRANCE STATUS--> EntranceFlag = 1 so the User will leave the laboratory
+                  sql3="CALL sp_updateRegistration(%s,%s,%s)" 
+                  sql3_input=(UserID, 2, 2)   # '1' for first registration
+                  cursor.execute(sql3,sql3_input)
+                  conexion.connection.commit() # Update Finished
+                  return jsonify({'message':'Registration done', 'EntranceFlag':2})
+            
+         else:    # Access denied - Any registration was found
+            # UPDATE DENIED ENTRANCE IN LAB 
+            sql5="CALL sp_updateRegistrationDenied('{0}')".format(UserID)
+            #sql5_input=(UserID)   # User ID
+            cursor.execute(sql5)
+            conexion.connection.commit() # Update Finished
+
+            #INSER TO DENIED ACCESS
+            return jsonify({'message':'ACCESO NEGADO'})
 
    except Exception as ex:
       return jsonify({'message':'LABORATORY REGISTRATION ERROR'})
@@ -340,7 +377,7 @@ def BuildingAccess():
 
    except Exception as ex:
       return jsonify({'message':'BUILDING REGISTRATION ERROR'})
-   
+
 
 @app.route('/GetEncondings', methods=['POST']) 
 def GenerateEncodings():
