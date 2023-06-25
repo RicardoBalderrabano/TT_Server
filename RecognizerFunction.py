@@ -49,7 +49,7 @@ def recognizer(encodings):
    FACEDB = os.path.abspath(os.path.realpath(FACEDB))
 
    # Confidence 
-   conf = 0.5
+   conf = 0.7
    maxImgs = 10
 
    # Load the faces database

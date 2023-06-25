@@ -16,7 +16,7 @@ from datetime import datetime
 from werkzeug.utils import secure_filename
 from json import JSONEncoder
 import traceback
-
+from flask_socketio import SocketIO, emit, send
 
 class NumpyArrayEncoder(JSONEncoder):
    def default(self, obj):
@@ -30,6 +30,19 @@ app = Flask(__name__)
 app.config.from_object(config['production'])
 
 conexion=MySQL(app)
+
+#Locker socket 
+#Locker socket
+socketio = SocketIO(app)
+
+@socketio.on('message')
+def handle_message(data):
+    print('received message: ' + data)
+    
+@socketio.on('connect')
+def test_connect(auth):
+   socketio.emit('message', 'Conectado')
+
 
 def allowed_file(filename):
    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -129,7 +142,12 @@ def checklocker():
             #ASIGN THE SAME LOCKER
             openflag=1 #Open locker and leave option
             lockerfree=LastLockerStatus[0]   #solo regresa la direccion porque es el mismo
-            lockerfreeJs={'LockerID':LastLockerStatus[0], 'DirectionF':LastLockerStatus[1]}   # LockerID, Direction to be opened
+            lockerfree2=str(lockerfree)
+            sqlLocker="SELECT LockerNum FROM Lockers WHERE LockerID='{0}'".format(lockerfree2)
+            #sql_inputLocker=(lockerfree2)  # '1' for first registration
+            cursor.execute(sqlLocker)
+            LockerNum=cursor.fetchone()
+            lockerfreeJs={'LockerID':LastLockerStatus[0], 'DirectionF':LockerNum[0]}   # LockerID, Direction to be opened
             print(LastLockerStatus)
             return jsonify({'LockerFree': lockerfreeJs, 'Openflag': openflag})
          
@@ -144,6 +162,11 @@ def checklocker():
             print(lockerfreeJs)
             return jsonify({'LockerFree':lockerfreeJs, 'Openflag': openflag}) # Lockers registered and Locker ID/Direction to be opened
          
+         elif LastLocker==2 and AnyLocker is None:
+            print("no hay lockers")
+            lockerfreeJs={'LockerID': 'None'}
+            return jsonify({'LockerFree': lockerfreeJs})
+         
       elif AnyLocker != None and LastLockerStatus is None:
          #ASIGN NEW LOCKER
          openflag=0 # Just open locker option
@@ -153,16 +176,17 @@ def checklocker():
          lockerfreeJs={'LockerID': lockerfree[0], 'DirectionF':lockerfree[1]} # LockerID, Direction to be opened
          print(lockerfreeJs)
          return jsonify({'LockerFree':lockerfreeJs, 'Openflag': openflag}) # Lockers registered and Locker ID/Direction to be opened
-      
+   
       else:
          print("no hay lockers")
          lockerfreeJs={'LockerID': 'None'}
-         return jsonify({'LockerFree': lockerfreeJs}) 
-
+         return jsonify({'LockerFree': lockerfreeJs})
+      
    except Exception as ex:
       print(ex)
       traceback.print_exc()
-      return jsonify({'message':'CHECK LOCKER ERROR'})
+      lockerfreeJs={'LockerID': 'ERROR LOCKERS'}
+      return jsonify({'LockerFree': lockerfreeJs})
 # Getting POST to update LockersUsers Table in the DB
 
 
@@ -406,6 +430,12 @@ def AddEncodings():
    res = addEncodings(UserID, encodings)
    return jsonify({'status':res})  
 
+@app.route('/OpenLocker', methods=['POST'])
+def envia():
+     port = request.json["port"]
+     print(port)
+     socketio.emit('message', port)
+     return jsonify({"message":"enviado"})
 
 def page_no_found(error):
    return "<h1>La pagina que intentas buscar no existe...</h1>", 404
@@ -415,3 +445,4 @@ if __name__ == "__main__":
    app.config.from_object(config['production'])
    app.register_error_handler(404,page_no_found)
    app.run(host='0.0.0.0',port=5100)
+   socketio.run(app)

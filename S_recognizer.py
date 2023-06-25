@@ -40,7 +40,7 @@ FACEDB = os.path.join(file_dir, FACEDB)
 FACEDB = os.path.abspath(os.path.realpath(FACEDB))
 
 # confidence 
-conf = 0.5
+conf = 0.85
 maxImgs = 10
 
 # load the faces database
@@ -54,7 +54,7 @@ fenco=[-0.24387170374393463, 0.03912365436553955, -0.0022386317141354084, -0.058
 arr=np.array([fenco])
 encodings=[(arr)]
 
-
+print(encodings)
 userIDs = []
     # get encoding of detected faces
     
@@ -64,7 +64,7 @@ for encoding in encodings:
     # attempt to match each face in the input image to our known
     # encodings
     matches = face_recognition.compare_faces(faceData["encodings"],
-                                                 encoding, 0.5)
+                                                 encoding, 0.7)
         # matches contains a list of True/False values indicating
         # which known_face_encodings match the face encoding to check
     print(matches)
